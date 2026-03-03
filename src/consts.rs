@@ -79,11 +79,11 @@ mod re_clean_tests {
     #[test]
     fn test_re_clean_replace_all_cleaning() {
         let test_cases = vec![
-            ("Amazing.Scene.1920x1080.1234567890.HDR.mkv", "Amazing.Scene..HDR.mkv"),
-            ("Show.S01E01.[3840×2160] ID-9876543210 2024", "Show.S01E01. ID- 2024"),
+            ("Amazing.Scene.1920x1080.1234567890.HDR.mkv", "Amazing.Scene...HDR.mkv"),
+            ("Show.S01E01.[3840×2160] ID-9876543210 2024", "Show.S01E01. ID-2024"),
             (
                 "Cool.Movie.(1280 x 720) 5555555555.jpg",
-                "Cool.Movie.() 5555555555.jpg", // 5555555555 is 10 digits -> removed
+                "Cool.Movie..jpg", // 5555555555 is 10 digits -> removed
             ),
             ("No.Junk.Here.png", "No.Junk.Here.png"),
             ("123456-video-2560x1440-final-version.webm", "-video--final-version.webm"),
@@ -99,7 +99,7 @@ mod re_clean_tests {
     fn test_re_clean_multiple_matches() {
         let input = "Video 1920x1080 12345678 [3840×2160] 9876543210";
         let cleaned = RE_CLEAN.replace_all(input, "").to_string();
-        assert_eq!(cleaned, "Video  ");
+        assert_eq!(cleaned, "Video");
     }
 
     #[test]
@@ -113,6 +113,6 @@ mod re_clean_tests {
         let ext = cleaned.rsplit('.').next().unwrap_or("").to_lowercase();
 
         assert!(DEFAULT_EXTENSIONS.contains(&ext.as_str()));
-        assert_eq!(cleaned, "photo..jpg");
+        assert_eq!(cleaned, "photo...jpg");
     }
 }
