@@ -1,0 +1,203 @@
+# https://infinyon.com/blog/2021/04/github-actions-best-practices/
+name: "Build - Check & Clippy"
+on:
+  push:
+    branches:
+      - master
+      - main
+env:
+  preview: ${{ github.event_name == 'release' && contains(github.event.release.tag_name, 'preview') }}
+  on_schedule: "false"
+  #
+  RUST_TOOLCHAIN: nightly
+  SCCACHE_GHA_ENABLED: true
+  RUSTC_WRAPPER: sccache
+  CACHE_VERSION: v1
+  SCCACHE_VERSION: 0.10.0
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  PROJECT_NAME: mrn_rs
+jobs:
+  check:
+    name: "Build - check"
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        rust: [nightly]
+        actions:
+          #
+          - name: Format
+            task: f
+            #
+          - name: Check
+            task: c
+            #
+          - name: Clippy
+            task: cp
+            #
+          - name: Test
+            task: t
+            #
+          - name: Test All
+            task: ta
+            #
+          - name: Build
+            task: b
+            #
+          - name: Build Release
+            task: br
+            #
+          - name: Build All
+            task: ba
+            #
+          - name: All (Everything)
+            task: a
+            #
+          - name: Distribution Output
+            task: dist
+            #
+            # For the cross-product matrix output, 
+            # anything matching 'os: ubuntu-latest' will have 
+            # sccache-path: ... 
+            # added to it in the final matrix output.
+      include:
+        - os: ubuntu-latest
+          sccache-path: /home/runner/.cache/sccache
+          target: x86_64-unknown-linux-gnu
+          #
+        - os: windows-latest
+          target: x86_64-pc-windows-msvc
+          #
+          # We 'exclude' a set of 'matches' from being generated when the entire matrix cross-product is generated.
+      exclude:
+        - os: windows-latest
+          rust: ${{ matrix.rust }}
+          actions:
+            name: Clippy
+            #
+            # matrix:
+            #   - os: ubuntu-latest
+            #     target: x86_64-unknown-linux-gnu
+            #     gcc: gcc-x86-64-linux-gnu
+            #     rust: nightly
+            #   - os: windows-latest
+            #     target: x86_64-pc-windows-msvc
+            #     rust: nightly
+    runs-on: ${{ matrix.os }}
+    if: "!contains(github.event.head_commit.message, 'skip ci')"
+    steps:
+      ########## Setup
+      - name: "Checkout sources"
+        uses: actions/checkout@v6
+        #
+      - name: "Setup sccache"
+        uses: mozilla-actions/sccache-action@v0.0.9
+        #
+      - name: "Install cargo tools"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-binstall,cargo-make,just,taplo
+          #
+      - name: "Cache Cargo dependencies"
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+          #
+      - name: "Setup actions/cache"
+        uses: actions/cache@v4
+        with:
+          key: ${{ runner.os }}-${{ env.CACHE_VERSION }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cargo/sccache/
+            target/
+          restore-keys: |
+            ${{ runner.os }}-${{ github.workflow }}-${{ env.CACHE_VERSION }}-.*${{ github.job }}-
+            ${{ runner.os }}-${{ github.workflow }}-${{ env.CACHE_VERSION }}.*
+          #
+      - name: "Install gcc"
+        if: matrix.gcc != ''
+        run: sudo apt update && sudo apt install -yq ${{ matrix.gcc }}
+        #
+      - name: "Setup Rust toolchain"
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: ${{ matrix.target }}
+      ########## Action
+      - name: "Run Cargo fmt"
+        run: cargo +nightly fmt --all
+      - name: "Run Cargo check"
+        run: cargo check
+      - name: "Run Clippy with pedantic"
+        run: cargo clippy --all-targets --all-features -- -W clippy::pedantic
+      - name: "Build project"
+        run: cargo build --release --all
+  clippy:
+    name: "Build - clippy"
+    strategy:
+      fail-fast: false
+      matrix:
+        - os: ubuntu-latest
+          target: x86_64-unknown-linux-gnu
+          gcc: gcc-x86-64-linux-gnu
+          rust: nightly
+        - os: windows-latest
+          target: x86_64-pc-windows-msvc
+          rust: nightly
+    runs-on: ${{ matrix.os }}
+    if: "!contains(github.event.head_commit.message, 'skip ci')"
+    steps:
+      ########## Setup
+      - name: "Checkout sources"
+        uses: actions/checkout@v6
+        #
+      - name: "Setup sccache"
+        uses: mozilla-actions/sccache-action@v0.0.9
+        #
+      - name: "Install cargo tools"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-binstall,cargo-make,just,taplo
+          #
+      - name: "Cache Cargo dependencies"
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+          #
+      - name: "Setup actions/cache"
+        uses: actions/cache@v4
+        with:
+          key: ${{ runner.os }}-${{ env.CACHE_VERSION }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cargo/sccache/
+            target/
+          restore-keys: |
+            ${{ runner.os }}-${{ github.workflow }}-${{ env.CACHE_VERSION }}-.*${{ github.job }}-
+            ${{ runner.os }}-${{ github.workflow }}-${{ env.CACHE_VERSION }}.*
+          #
+      - name: "Install gcc"
+        if: matrix.gcc != ''
+        run: sudo apt update && sudo apt install -yq ${{ matrix.gcc }}
+        #
+      - name: "Setup Rust toolchain"
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: ${{ matrix.target }}
+      ########## Action
+      - name: "Run Cargo fmt"
+        run: cargo +nightly fmt --all
+      - name: "Run Clippy with pedantic"
+        run: cargo clippy --all-targets --all-features -- -W clippy::pedantic
+      - name: "Build project"
+        run: cargo build --release --all

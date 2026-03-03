@@ -1,0 +1,84 @@
+# https://infinyon.com/blog/2021/04/github-actions-best-practices/
+name: "Formatting"
+on:
+  # schedule:
+  #   - cron: "0 0 * * *"
+  push:
+    branches:
+      - master
+      - main
+      - develop
+      - dev
+env:
+  #
+  RUST_TOOLCHAIN: nightly
+  SCCACHE_GHA_ENABLED: true
+  RUSTC_WRAPPER: sccache
+  CACHE_VERSION: v1
+  SCCACHE_VERSION: 0.10.0
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  PROJECT_NAME: mrn_rs
+jobs:
+  format-lint:
+    name: "Formatting - format-lint"
+    strategy:
+      matrix:
+        - os: ubuntu-latest
+          target: x86_64-unknown-linux-gnu
+          gcc: gcc-x86-64-linux-gnu
+          rust: nightly
+        - os: windows-latest
+          target: x86_64-pc-windows-msvc
+          rust: nightly
+    runs-on: ${{ matrix.os }}
+    if: "!contains(github.event.head_commit.message, 'skip ci')"
+    steps:
+      ########## Setup
+      - name: "Checkout sources"
+        uses: actions/checkout@v6
+        #
+      - name: "Setup sccache"
+        uses: mozilla-actions/sccache-action@v0.0.9
+        #
+      - name: "Install cargo tools"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-binstall,cargo-make,just,taplo
+          #
+      - name: "Cache Cargo dependencies"
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+          #
+      - name: "Setup actions/cache"
+        uses: actions/cache@v4
+        with:
+          key: ${{ runner.os }}-${{ env.CACHE_VERSION }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cargo/sccache/
+            target/
+          restore-keys: |
+            ${{ runner.os }}-${{ github.workflow }}-${{ env.CACHE_VERSION }}-.*${{ github.job }}-
+            ${{ runner.os }}-${{ github.workflow }}-${{ env.CACHE_VERSION }}.*
+          #
+      - name: "Install gcc"
+        if: matrix.gcc != ''
+        run: sudo apt update && sudo apt install -yq ${{ matrix.gcc }}
+        #
+      - name: "Setup Rust toolchain"
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: ${{ matrix.target }}
+      ########## Action
+      - name: "Run Cargo fmt"
+        run: cargo +nightly fmt --all
+        #
+      - name: "Build project"
+        run: cargo build --release --all
