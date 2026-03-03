@@ -7,8 +7,11 @@ pub(crate) static RE_CLEAN: LazyLock<Regex> = LazyLock::new(|| {
         .expect("Failed to compile RE_CLEAN Regex")
 });
 
+pub(crate) static RE_SEPARATORS: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[-._\s]+").expect("Failed to compile separator regex"));
+
 pub(crate) const DEFAULT_EXTENSIONS: &[&str] = &[
-    "jpg", "jpeg", "png", "webp", "gif", "bmp", "tiff", "tif", "heic", "avif",
+    "jpg", "jpeg", "png", "webp", "bmp", "tiff", "tif", "heic", "avif",
 ];
 
 pub(crate) const TRIM_CHARS: &[char] = &[' ', '-', '_', '[', ']', '(', ')'];

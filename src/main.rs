@@ -14,7 +14,7 @@ use rayon::prelude::*;
 use walkdir::WalkDir;
 
 use crate::cli::Cli;
-use crate::consts::{RE_CLEAN, TRIM_CHARS};
+use crate::consts::{RE_CLEAN, RE_SEPARATORS, TRIM_CHARS};
 pub use crate::prelude::*;
 
 #[derive(Debug, Clone, Copy)]
@@ -126,8 +126,22 @@ enum Action {
 impl std::fmt::Display for Action {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Action::Rename(r) => write!(f, "-> {} -> {}", r.from.display(), r.to.display()),
-            Action::Copy(r) => write!(f, "*C {} -> {}", r.from.display(), r.to.display()),
+            Action::Rename(r) => {
+                let (short_from, short_to) = (
+                    r.from.file_name().and_then(|s| s.to_str()).unwrap_or(""),
+                    r.to.file_name().and_then(|s| s.to_str()).unwrap_or(""),
+                );
+
+                write!(f, "-> {} -> {}", short_from, short_to)
+            }
+            Action::Copy(r) => {
+                let (short_from, short_to) = (
+                    r.from.file_name().and_then(|s| s.to_str()).unwrap_or(""),
+                    r.to.file_name().and_then(|s| s.to_str()).unwrap_or(""),
+                );
+
+                write!(f, "*C {} -> {}", short_from, short_to)
+            }
         }
     }
 }
@@ -160,7 +174,10 @@ fn main() -> Result<()> {
         .flat_map(|group| build_actions(group, &mode))
         .collect();
 
-    args.dry_run(&actions);
+    if args.dry_run {
+        args.dry_run(&actions);
+        return Ok(());
+    }
 
     execute_actions(&actions)?;
 
@@ -214,14 +231,16 @@ fn process_file<P: AsRef<Path>>(path: P) -> Option<ImageCandidate> {
     Some(ImageCandidate::new(path, cleaned_name, dims, ext.into()))
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Pure, allocation-free cleaning
-// ─────────────────────────────────────────────────────────────────────────────
 fn clean_stem(stem: &'_ str) -> Cow<'_, str> {
     let trimmed = RE_CLEAN
         .replace_all(stem, "")
         .trim_matches(TRIM_CHARS)
         .to_string();
+
+    // let trimmed = RE_SEPARATORS
+    //     .replace_all(stem, ".")
+    //     .trim_matches('.')
+    //     .to_string();
 
     if trimmed.is_empty() {
         // stem.to_string()
@@ -309,7 +328,9 @@ fn execute_actions(actions: &[Action]) -> Result<()> {
                 )
                 .expect("Failed to create target directory");
 
-                std::fs::rename(&r.from, &r.to).map(|_| "Renamed")
+                let a = std::fs::rename(&r.from, &r.to).map(|_| "Renamed");
+                println!("{} -> {}", r.from.display(), r.to.display());
+                a
             }
             Action::Copy(r) => {
                 let _ = std::fs::create_dir_all(r.to.parent().unwrap());
